@@ -1,5 +1,6 @@
 import random
 import typing as t
+from pathlib import Path
 from time import perf_counter
 
 import cv2 as cv
@@ -14,17 +15,25 @@ FRAME_SIZE = 900
 TOP_BAR_SIZE = 100
 TOP_BAR_WIDTH = 4
 
-
-STEP_TIME = 0.01
+STEP_TIME = 0
 GEN_TIME = 2
 
 
 # noinspection PyUnresolvedReferences
 class Renderer:
-    def __init__(self, deserializer, frame_size=FRAME_SIZE, topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH,
-                 step_time=STEP_TIME, gen_time=GEN_TIME):
+    def __init__(self, deserializer, show_frames=True, out_dir: Path = None, frame_size=FRAME_SIZE,
+                 topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH, step_time=STEP_TIME, gen_time=GEN_TIME):
         assert deserializer.grid.x == deserializer.grid.y
         self.deserializer = deserializer
+
+        self.show_frames = show_frames
+        self.out_dir = out_dir
+        if self.out_dir is not None:
+            if not self.out_dir.exists():
+                self.out_dir.mkdir()
+            self.save_frames = self.out_dir
+        else:
+            self.save_frames = None
 
         self.frame_size = frame_size
         self.topbar_size = topbar_size
@@ -42,6 +51,7 @@ class Renderer:
         self.y_offset = self.topbar_size + self.topbar_width + self.circle_radius
 
         self.img_base = np.full((self.frame_height, self.frame_width, 3), 255, np.uint8)
+        self.img = None
         cv.line(self.img_base, (0, self.topbar_size), (self.frame_width, self.topbar_size), (0, 0, 0),
                 self.topbar_width)
 
@@ -50,6 +60,10 @@ class Renderer:
 
         self.generation = -1
         self.step = self.deserializer.params.generationSteps
+
+        self.finished = False
+        self.wait_time = self.gen_time
+        self.gen = True
 
     def set_entity_colours(self):
         for i in range(self.deserializer.params.entityCount):
@@ -68,20 +82,16 @@ class Renderer:
         return img
 
     def run(self):
-        img = None
-        finished = False
+        self.gen = True
 
-        wait_time = self.gen_time
-        gen = True
-
-        start = perf_counter() - wait_time
+        start = perf_counter() - self.wait_time
         while True:
-            if not finished:
+            if not self.finished:
                 now = perf_counter()
-                if now - start >= wait_time:
-                    if gen:
-                        gen = False
-                        wait_time = self.step_time
+                if now - start >= self.wait_time:
+                    if self.gen:
+                        self.gen = False
+                        self.wait_time = self.step_time
 
                         self.generation += 1
                         if self.generation:
@@ -90,7 +100,7 @@ class Renderer:
                         self.deserializer.read_genomes()
                         pos = self.deserializer.read_initial_pos()
                         if pos is None:
-                            finished = True
+                            self.finished = True
                             print('\nFinished')
                             continue
                         print(f"\nGeneration: {self.generation}")
@@ -101,8 +111,8 @@ class Renderer:
                         self.step = 0
 
                     if self.step == self.deserializer.params.generationSteps:
-                        gen = True
-                        wait_time = self.gen_time
+                        self.gen = True
+                        self.wait_time = self.gen_time
                     else:
                         self.step += 1
                         print(f'\tStep: {self.step}', end='\r')
@@ -111,9 +121,12 @@ class Renderer:
                             if action:
                                 self.entity_positions[i] += action
 
-                    img = self.draw_frame()
+                    self.img = self.draw_frame()
+                    if self.save_frames:
+                        cv.imwrite(str(self.out_dir / f"{self.generation}-{self.step}.jpg"), self.img)
                     start = perf_counter()
-            cv.imshow('frame', img)
+            if self.show_frames:
+                cv.imshow('frame', self.img)
 
-            if cv.waitKey(1) == ord('q'):
-                break
+                if cv.waitKey(1) == ord('q'):
+                    break

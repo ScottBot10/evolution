@@ -46,7 +46,7 @@ def render(args):
         renderer.run()
 
 
-def valid_path(path):
+def valid_file(path):
     if (file := Path(path)).is_file():
         return file
     else:
@@ -70,11 +70,13 @@ evolve_parser.add_argument('-g', '--generations', type=int)
 
 render_parser = subparsers.add_parser('render')
 render_parser.set_defaults(func=render)
-render_parser.add_argument('-i', '--input', dest='filename', required=True, metavar='FILE', type=valid_path)
+render_parser.add_argument('-i', '--input', dest='filename', required=True, metavar='FILE', type=valid_file)
+render_parser.add_argument('-o', '--output', dest='out_dir', metavar='FILE', type=Path)
+render_parser.add_argument('--hide-frames', dest='show_frames', action='store_false', default=True)
 render_parser.add_argument('--frame-size', dest='frame_size', type=int)
 render_parser.add_argument('--topbar-size', dest='topbar_size', type=int)
 render_parser.add_argument('--topbar-width', dest='topbar_width', type=int)
 render_parser.add_argument('--step-time', dest='step_time', type=float)
 render_parser.add_argument('--gen-time', dest='gen_time', type=float)
 
-renderer_argnames = ('frame_size', 'topbar_size', 'topbar_width', 'step_time', 'gen_time')
+renderer_argnames = ('out_dir', 'frame_size', 'topbar_size', 'topbar_width', 'step_time', 'gen_time')
