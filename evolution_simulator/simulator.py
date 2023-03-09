@@ -8,7 +8,28 @@ from .entity.genome import NeuralNetwork
 from .entity.genome import generate_child_genome
 from .models import Coord
 from .parameters import Parameters
-from .serializer import SerializerV0
+from .serializer.serializer import SerializerV0
+import signal
+
+
+def false_func(*a, **kw):
+    return False
+
+
+class DelayedKeyboardInterrupt:
+
+    def __enter__(self):
+        self.signal_received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+        print('SIGINT received. Delaying KeyboardInterrupt.')
+
+    def __exit__(self, type, value, traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received:
+            self.old_handler(*self.signal_received)
 
 
 class Simulator:
@@ -58,24 +79,28 @@ class Simulator:
     def entity_at_pos(self, pos):
         return self.grid[pos.x, pos.y]
 
-    def run(self, until=lambda sim: False):
+    def run(self, until=None):
         # TODO: add multithreading
+        if until is None:
+            until = false_func
         while not until(self):
-            print('Generation: ', self.generation)
-            self.serializer.write_genomes(self.entities)
-            start = perf_counter()
-            for self.step in range(self.Parameters.Simulation.steps_per_generation):
-                # print(self.step)
-                for entity in self.entities:
-                    if entity.alive:
-                        self.step_entity(entity)
-                if self.Parameters.Simulation.selection_pressure.on_step:
-                    self.Parameters.Simulation.selection_pressure.on_step(self)
-            gen_time = perf_counter() - start
-            print('Time taken: ', gen_time)
-            self.spawn_new_gen(gen_time)
-            self.generation += 1
-            print()
+            with DelayedKeyboardInterrupt():
+                print('Generation: ', self.generation)
+                self.serializer.write_genomes(self.entities)
+                self.serializer.write_initial_pos(self.entities)
+                start = perf_counter()
+                for self.step in range(self.Parameters.Simulation.steps_per_generation):
+                    # print(self.step)
+                    for entity in self.entities:
+                        if entity.alive:
+                            self.step_entity(entity)
+                    if self.Parameters.Simulation.selection_pressure.on_step:
+                        self.Parameters.Simulation.selection_pressure.on_step(self)
+                gen_time = perf_counter() - start
+                print('Time taken: ', gen_time)
+                self.spawn_new_gen(gen_time)
+                self.generation += 1
+                print()
 
     def step_entity(self, entity):
         entity.age += 1

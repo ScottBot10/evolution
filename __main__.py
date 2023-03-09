@@ -8,7 +8,7 @@ if __name__ == '__main__':
             module = importlib.import_module(module_name)
             clazz = getattr(module, class_name, None)
             if clazz is not None:
-                clazz()
+                clazz(*sys.argv[2:])
                 # input()
         except ModuleNotFoundError:
             raise ModuleNotFoundError(f"No module named '{module_name}'")

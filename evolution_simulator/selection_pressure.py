@@ -28,7 +28,7 @@ class AllSurvive(SelectionPressure):
         return {entity.index: 1 for entity in simulator.entities}
 
 
-class RightHalf(SelectionPressure):
+class LeftHalf(SelectionPressure):
     enabled = True
 
     @classmethod

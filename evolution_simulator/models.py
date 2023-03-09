@@ -1,5 +1,6 @@
 from enum import Enum
 from math import sqrt, trunc
+from .serializer.structures import Action, PosStruct
 
 
 class Direction(Enum):  # uint3
@@ -63,6 +64,20 @@ class Coord:
 
     def normalize(self):
         return self.as_dir().as_normalized_coord()
+
+    def to_action(self):
+        return Action(self.x, self.y)
+
+    @classmethod
+    def from_action(cls, action: Action):
+        return cls(action.moveX, action.moveY)
+
+    def to_pos_struct(self):
+        return PosStruct(self.x, self.y)
+
+    @classmethod
+    def from_pos_struct(cls, pos_struct):
+        return cls(pos_struct.x, pos_struct.y)
 
     def length(self):
         return sqrt(self.x * self.x + self.y * self.y)
