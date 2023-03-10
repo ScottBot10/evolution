@@ -4,10 +4,6 @@ from pathlib import Path
 
 from numpy.random import RandomState
 
-from .simulator import Simulator
-from .serializer.serializer import get_serializer
-from .renderer import Renderer
-
 
 def main(args):
     args = parser.parse_args(args=args)
@@ -15,6 +11,8 @@ def main(args):
 
 
 def evolve(args):
+    from .simulator import Simulator
+
     prng = RandomState(args.seed)
 
     if args.generations is not None:
@@ -31,6 +29,9 @@ def evolve(args):
 
 
 def render(args):
+    from .serializer.serializer import get_serializer
+    from .renderer import Renderer
+
     renderer_args = {}
     for argname in renderer_argnames:
         attr = getattr(args, argname)

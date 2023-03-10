@@ -1,16 +1,9 @@
 # TODO: Think of a better name for this
-
-
-class VectorMeta(type):
-    def __new__(mcs, name, bases, attrs):
-        cls = super().__new__(mcs, name, bases, attrs)
-        if cls.enabled and cls.vector_group is not None:
-            cls.vector_group.add(cls)
-        return cls
+import typing as t
 
 
 class VectorGroup:
-    def __init__(self, *vectors: 'Vector'):
+    def __init__(self, *vectors: t.Type['Vector']):
         self.ids = {}
         self.names = {}
         if vectors:
@@ -31,21 +24,25 @@ class VectorGroup:
     def __len__(self):
         return self.len
 
-    def add(self, cls):
-        id = cls.id
-        if id is None:
-            id = self.len
-        self.ids[id] = cls
+    def add(self, cls: t.Type['Vector']):
+        cls_id = cls.id
+        if cls_id is None:
+            cls_id = self.len
+        self.ids[cls_id] = cls
         self.names[cls.__qualname__] = cls
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int | str):
         if isinstance(item, int):
             return self.ids[item]
         elif isinstance(item, str):
             return self.names[item]
 
 
-class Vector(metaclass=VectorMeta):
+class Vector:
     enabled: bool = False
     vector_group: VectorGroup = None
     id: int = None  # uint7 (0 to 127)
+
+    def __init_subclass__(cls):
+        if cls.enabled and cls.vector_group is not None:
+            cls.vector_group.add(cls)

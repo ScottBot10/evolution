@@ -1,9 +1,10 @@
 import os
+import typing as t
 from os.path import join
 
 import yaml
 
-from .selection_pressure import selection_pressures, Vector
+from .selection_pressure import selection_pressures, SelectionPressure
 
 
 def _make_vector_node(vector):
@@ -59,7 +60,7 @@ class Parameters:
     class Simulation(metaclass=YAMLGetter):
         section = "simulation"
 
-        selection_pressure: Vector
+        selection_pressure: t.Type[SelectionPressure]
         steps_per_generation: int
         long_probe_distance: int
         population_sensor_radius: float

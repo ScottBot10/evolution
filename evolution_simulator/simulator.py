@@ -36,6 +36,7 @@ class Simulator:
     def __init__(self, prng, fd):
         self.prng = prng  # TODO: switch to new way of doing numpy random
         self.Parameters: t.Type[Parameters] = Parameters
+        self.selection_pressure = self.Parameters.Simulation.selection_pressure(self)
         self.serializer = SerializerV0(fd).Serializer(self.Parameters)
 
         self.grid = np.zeros((self.Parameters.World.grid_x, self.Parameters.World.grid_y), dtype=np.uint16)  # 65_536
@@ -90,12 +91,11 @@ class Simulator:
                 self.serializer.write_initial_pos(self.entities)
                 start = perf_counter()
                 for self.step in range(self.Parameters.Simulation.steps_per_generation):
-                    # print(self.step)
                     for entity in self.entities:
                         if entity.alive:
                             self.step_entity(entity)
-                    if self.Parameters.Simulation.selection_pressure.on_step:
-                        self.Parameters.Simulation.selection_pressure.on_step(self)
+                    if self.selection_pressure.on_step:
+                        self.selection_pressure.on_step(self)
                 gen_time = perf_counter() - start
                 print('Time taken: ', gen_time)
                 self.spawn_new_gen(gen_time)
@@ -108,13 +108,13 @@ class Simulator:
         entity.execute_actions(self, action_levels)
 
     def spawn_new_gen(self, gen_time):
-        survival_scores = self.Parameters.Simulation.selection_pressure.select(self)
+        survival_scores = self.selection_pressure.select(self)
         for entity_index in list(survival_scores.keys()):
             entity = self.entities[entity_index - 1]
             if not entity.nn.connections or not entity.alive:
                 survival_scores.pop(entity_index)
         print('Survivors: ', len(survival_scores))
-        indexes = [d[0] - 1 for d in sorted(survival_scores.items(), key=lambda d: d[1])]
+        indexes = [d[0] - 1 for d in sorted(survival_scores.items(), key=lambda d: d[1], reverse=True)]
         genomes = [self.entities[index].genome for index in indexes]
         self.serializer.write_generation(indexes, gen_time)
         self.grid.fill(0)
