@@ -2,7 +2,7 @@ import argparse
 import gzip
 from pathlib import Path
 
-from numpy.random import RandomState
+from numpy.random import default_rng
 
 
 def main(args):
@@ -13,7 +13,7 @@ def main(args):
 def evolve(args):
     from .simulator import Simulator
 
-    prng = RandomState(args.seed)
+    prng = default_rng(seed=args.seed)
 
     if args.generations is not None:
         def until(sim):

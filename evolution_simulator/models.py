@@ -32,7 +32,7 @@ class Direction(Enum):  # uint3
 
     @classmethod
     def random(cls, prng):
-        return cls.N.rotate(prng.randint(0, 8))
+        return cls.N.rotate(prng.integers(0, 8))
 
 
 SW, S, SE, W, C, E, NW, N, NE = Direction.SW, Direction.S, Direction.SE, Direction.W, Direction.CENTER, \

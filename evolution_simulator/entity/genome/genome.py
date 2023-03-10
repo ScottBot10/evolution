@@ -41,8 +41,8 @@ class GeneContainer(ctypes.Union):
     @classmethod
     def random(cls, prng):
         return cls(
-            Gene(prng.randint(0, 2), prng.randint(0, 128), prng.randint(0, 2), prng.randint(0, 128),
-                 prng.randint(-0x8000, 0x8000)))
+            Gene(prng.integers(2), prng.integers(128), prng.integers(2), prng.integers(128),
+                 prng.integers(-0x8000, 0x8000)))
 
 
 Genome = t.List[GeneContainer]
@@ -51,19 +51,19 @@ Genome = t.List[GeneContainer]
 def mutate_genome(genome: Genome, prng, point_mutation_rate):
     for _ in range(len(genome)):
         if prng.random() < point_mutation_rate:
-            index = prng.randint(len(genome))
+            index = prng.integers(len(genome))
             gene = genome[index].b
-            chance = prng.randint(5)
+            chance = prng.integers(5)
             if chance == 0:
                 gene.inputType ^= 1
             elif chance == 1:
                 gene.outputType ^= 1
             elif chance == 2:
-                gene.inputNum ^= (1 << prng.randint(8))
+                gene.inputNum ^= (1 << prng.integers(8))
             elif chance == 3:
-                gene.outputNum ^= (1 << prng.randint(8))
+                gene.outputNum ^= (1 << prng.integers(8))
             elif chance == 4:
-                gene.weight ^= (1 << prng.randint(1, 16))
+                gene.weight ^= (1 << prng.integers(1, 16))
 
 
 def copy_genome(genome: Genome):
@@ -74,11 +74,11 @@ def generate_child_genome(prng, genomes: t.List[Genome], by_fitness: bool, sexua
                           point_mutation_rate: float):
     genomes_length = len(genomes)
     if by_fitness and genomes_length > 1:
-        parent1 = prng.randint(1, genomes_length)
-        parent2 = prng.randint(0, parent1)
+        parent1 = prng.integers(1, genomes_length)
+        parent2 = prng.integers(0, parent1)
     else:
-        parent1 = prng.randint(0, genomes_length)
-        parent2 = prng.randint(0, genomes_length)
+        parent1 = prng.integers(0, genomes_length)
+        parent2 = prng.integers(0, genomes_length)
 
     genome1 = copy_genome(genomes[parent1])
 
@@ -86,8 +86,8 @@ def generate_child_genome(prng, genomes: t.List[Genome], by_fitness: bool, sexua
         genome2 = copy_genome(genomes[parent2])
         shorter, genome = sorted((genome1, genome2), key=len)
         shorter_len = len(shorter)
-        index1 = prng.randint(0, shorter_len)
-        index2 = prng.randint(index1, shorter_len)
+        index1 = prng.integers(0, shorter_len)
+        index2 = prng.integers(index1, shorter_len)
 
         for i in range(index1, index2 + 1):
             genome[i] = shorter[i]

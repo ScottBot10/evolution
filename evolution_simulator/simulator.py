@@ -34,7 +34,7 @@ class DelayedKeyboardInterrupt:
 
 class Simulator:
     def __init__(self, prng, fd):
-        self.prng = prng  # TODO: switch to new way of doing numpy random
+        self.prng = prng
         self.Parameters: t.Type[Parameters] = Parameters
         self.selection_pressure = self.Parameters.Simulation.selection_pressure(self)
         self.serializer = SerializerV0(fd).Serializer(self.Parameters)
