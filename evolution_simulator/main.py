@@ -7,7 +7,7 @@ from numpy.random import default_rng
 
 def main(args):
     args = parser.parse_args(args=args)
-    args.func(args)
+    return args.func(args)
 
 
 def evolve(args):
@@ -44,7 +44,7 @@ def render(args):
             deserializer,
             **renderer_args
         )
-        renderer.run()
+        return renderer.run()
 
 
 def valid_file(path):
@@ -80,4 +80,4 @@ render_parser.add_argument('--topbar-width', dest='topbar_width', type=int)
 render_parser.add_argument('--step-time', dest='step_time', type=float)
 render_parser.add_argument('--gen-time', dest='gen_time', type=float)
 
-renderer_argnames = ('out_dir', 'frame_size', 'topbar_size', 'topbar_width', 'step_time', 'gen_time')
+renderer_argnames = ('out_dir', 'show_frames', 'frame_size', 'topbar_size', 'topbar_width', 'step_time', 'gen_time')

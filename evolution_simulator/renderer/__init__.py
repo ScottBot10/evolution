@@ -1,4 +1,4 @@
-import random
+from numpy.random import default_rng
 import typing as t
 from pathlib import Path
 from time import perf_counter
@@ -6,9 +6,9 @@ from time import perf_counter
 import cv2 as cv
 import numpy as np
 
-from ..serializer.serializer import Coord
+from ..serializer.serializer import Coord, SerializerBase
 
-random.seed(42)
+prng = default_rng(42)
 
 FRAME_SIZE = 900
 
@@ -16,14 +16,16 @@ TOP_BAR_SIZE = 100
 TOP_BAR_WIDTH = 4
 
 STEP_TIME = 0
-GEN_TIME = 2
+GEN_TIME = 0
 
 
 # noinspection PyUnresolvedReferences
 class Renderer:
-    def __init__(self, deserializer, show_frames=True, out_dir: Path = None, frame_size=FRAME_SIZE,
-                 topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH, step_time=STEP_TIME, gen_time=GEN_TIME):
+    def __init__(self, deserializer: SerializerBase.Deserializer, show_frames=True, out_dir: Path = None,
+                 frame_size=FRAME_SIZE,topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH,
+                 step_time=STEP_TIME, gen_time=GEN_TIME):
         assert deserializer.grid.x == deserializer.grid.y
+        self.ssss = perf_counter()
         self.deserializer = deserializer
 
         self.show_frames = show_frames
@@ -42,6 +44,8 @@ class Renderer:
         self.frame_width = self.frame_size
         self.frame_height = self.frame_size + self.topbar_size + self.topbar_width
 
+        self.top_panel_height = 30
+
         self.step_time = step_time
         self.gen_time = gen_time
 
@@ -54,8 +58,12 @@ class Renderer:
         self.img = None
         cv.line(self.img_base, (0, self.topbar_size), (self.frame_width, self.topbar_size), (0, 0, 0),
                 self.topbar_width)
+        j, self.text_height = cv.getTextSize(f'Entities: {self.deserializer.params.entityCount}',
+                                             cv.FONT_HERSHEY_SIMPLEX, 1, cv.LINE_AA)[0]
+        cv.putText(self.img_base, f'Entities: {self.deserializer.params.entityCount}', (0, self.top_panel_height),
+                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
 
-        self.entity_colours: t.Dict[int, tuple[int]] = {}
+        self.entity_colours: t.Dict[int, tuple[int, int, int]] = {}
         self.entity_positions: t.List[Coord] = []
 
         self.generation = -1
@@ -67,11 +75,12 @@ class Renderer:
 
     def set_entity_colours(self):
         for i in range(self.deserializer.params.entityCount):
-            self.entity_colours[i] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            self.entity_colours[i] = (int(prng.integers(256)), int(prng.integers(256)), int(prng.integers(256)))
 
     def draw_circle_at(self, img, grid_x, grid_y, colour):
         cv.circle(img, (self.circle_radius + (self.circle_diameter * grid_x),
                         self.y_offset + (self.circle_diameter * grid_y)),
+
                   self.circle_radius,
                   colour, -1)
 
@@ -79,6 +88,8 @@ class Renderer:
         img = self.img_base.copy()
         for i, pos in enumerate(self.entity_positions):
             self.draw_circle_at(img, pos.x, pos.y, self.entity_colours[i])
+        cv.putText(img, f'Generation: {self.generation}', (0, self.topbar_size-self.text_height),
+                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
         return img
 
     def run(self):
@@ -102,6 +113,7 @@ class Renderer:
                         if pos is None:
                             self.finished = True
                             print('\nFinished')
+                            # return perf_counter() - self.ssss
                             continue
                         print(f"\nGeneration: {self.generation}")
                         self.entity_positions = pos
