@@ -1,6 +1,6 @@
 from .main import main
 from .renderer.render_nn_diagram import render_graph
-from .serializer.serializer import main as serializer
+# from .serializer.serializer import main as serializer
 
 
 class Main:

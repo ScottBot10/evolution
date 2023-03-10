@@ -36,7 +36,7 @@ class Simulator:
     def __init__(self, prng, fd):
         self.prng = prng  # TODO: switch to new way of doing numpy random
         self.Parameters: t.Type[Parameters] = Parameters
-        self.serializer = SerializerV0(fd, self.Parameters)
+        self.serializer = SerializerV0(fd).Serializer(self.Parameters)
 
         self.grid = np.zeros((self.Parameters.World.grid_x, self.Parameters.World.grid_y), dtype=np.uint16)  # 65_536
 

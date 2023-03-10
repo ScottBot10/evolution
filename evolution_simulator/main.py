@@ -5,7 +5,7 @@ from pathlib import Path
 from numpy.random import RandomState
 
 from .simulator import Simulator
-from .serializer.serializer import get_deserializer
+from .serializer.serializer import get_serializer
 from .renderer import Renderer
 
 
@@ -38,7 +38,7 @@ def render(args):
             renderer_args[argname] = attr
 
     with gzip.open(args.filename, 'rb') as f:
-        deserializer = get_deserializer(f)
+        deserializer = get_serializer(f).Deserializer()
         renderer = Renderer(
             deserializer,
             **renderer_args
