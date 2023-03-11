@@ -1,10 +1,10 @@
-from numpy.random import default_rng
 import typing as t
 from pathlib import Path
 from time import perf_counter
 
 import cv2 as cv
 import numpy as np
+from numpy.random import default_rng
 
 from ..serializer.serializer import Coord, SerializerBase
 
@@ -22,7 +22,7 @@ GEN_TIME = 0
 # noinspection PyUnresolvedReferences
 class Renderer:
     def __init__(self, deserializer: SerializerBase.Deserializer, show_frames=True, out_dir: Path = None,
-                 frame_size=FRAME_SIZE,topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH,
+                 frame_size=FRAME_SIZE, topbar_size=TOP_BAR_SIZE, topbar_width=TOP_BAR_WIDTH,
                  step_time=STEP_TIME, gen_time=GEN_TIME):
         assert deserializer.grid.x == deserializer.grid.y
         self.ssss = perf_counter()
@@ -40,11 +40,12 @@ class Renderer:
         self.frame_size = frame_size
         self.topbar_size = topbar_size
         self.topbar_width = topbar_width
+        panel_size = 25
+        topbar_nopanel = self.topbar_size - panel_size
 
         self.frame_width = self.frame_size
-        self.frame_height = self.frame_size + self.topbar_size + self.topbar_width
-
-        self.top_panel_height = 30
+        self.half_frame_width = self.frame_width / 2
+        frame_height = self.frame_size + self.topbar_size + self.topbar_width
 
         self.step_time = step_time
         self.gen_time = gen_time
@@ -54,13 +55,25 @@ class Renderer:
 
         self.y_offset = self.topbar_size + self.topbar_width + self.circle_radius
 
-        self.img_base = np.full((self.frame_height, self.frame_width, 3), 255, np.uint8)
+        self.img_base = np.full((frame_height, self.frame_width, 3), 255, np.uint8)
         self.img = None
         cv.line(self.img_base, (0, self.topbar_size), (self.frame_width, self.topbar_size), (0, 0, 0),
                 self.topbar_width)
-        j, self.text_height = cv.getTextSize(f'Entities: {self.deserializer.params.entityCount}',
-                                             cv.FONT_HERSHEY_SIMPLEX, 1, cv.LINE_AA)[0]
-        cv.putText(self.img_base, f'Entities: {self.deserializer.params.entityCount}', (0, self.top_panel_height),
+
+        bottom_text_count = 2
+        bottom_piece = self.frame_size / bottom_text_count / 2
+        self.bottom_text_locations = [
+            self.frame_size * ((i + 1) / bottom_text_count) - bottom_piece
+            for i in range(bottom_text_count)
+        ]
+
+        self.text_sizes = {}
+
+        (text_width, text_height), text = self.get_text_size(f'Entities: {self.deserializer.params.entityCount}')
+        text_height /= 2
+        self.text_upper = int((topbar_nopanel * 1 / 4) - text_height / 2) + panel_size
+        self.text_lower = int((topbar_nopanel * 3 / 4) - text_height / 2) + panel_size
+        cv.putText(self.img_base, text, (int(self.half_frame_width - (text_width / 2)), self.text_upper),
                    cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
 
         self.entity_colours: t.Dict[int, tuple[int, int, int]] = {}
@@ -68,10 +81,19 @@ class Renderer:
 
         self.generation = -1
         self.step = self.deserializer.params.generationSteps
+        self.survivors = 0
 
         self.finished = False
         self.wait_time = self.gen_time
         self.gen = True
+
+    def get_text_size(self, text, scale=1):
+        text_len = len(text)
+        if text_len not in self.text_sizes:
+            value = self.text_sizes[text_len] = cv.getTextSize(text, cv.FONT_HERSHEY_SIMPLEX, scale, cv.LINE_AA)[0]
+        else:
+            value = self.text_sizes[text_len]
+        return value, text
 
     def set_entity_colours(self):
         for i in range(self.deserializer.params.entityCount):
@@ -88,7 +110,12 @@ class Renderer:
         img = self.img_base.copy()
         for i, pos in enumerate(self.entity_positions):
             self.draw_circle_at(img, pos.x, pos.y, self.entity_colours[i])
-        cv.putText(img, f'Generation: {self.generation}', (0, self.topbar_size-self.text_height),
+
+        (width, _), text = self.get_text_size(f'Generation: {self.generation + 1}')
+        cv.putText(img, text, (int(self.bottom_text_locations[0] - (width / 2)), self.text_lower),
+                   cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
+        (width, _), text = self.get_text_size(f'Survivors: {self.survivors}')
+        cv.putText(img, text, (int(self.bottom_text_locations[1] - (width / 2)), self.text_lower),
                    cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
         return img
 
@@ -105,18 +132,17 @@ class Renderer:
                         self.wait_time = self.step_time
 
                         self.generation += 1
-                        if self.generation:
-                            self.deserializer.read_stats()
 
-                        self.deserializer.read_genomes()
-                        pos = self.deserializer.read_initial_pos()
-                        if pos is None:
+                        stats = self.deserializer.read_stats()
+                        if stats is None:
                             self.finished = True
                             print('\nFinished')
-                            # return perf_counter() - self.ssss
+                            return perf_counter() - self.ssss
                             continue
+                        self.survivors, _ = stats
+                        self.deserializer.read_genomes()
+                        self.entity_positions = self.deserializer.read_initial_pos()
                         print(f"\nGeneration: {self.generation}")
-                        self.entity_positions = pos
 
                         self.set_entity_colours()
 
@@ -125,6 +151,7 @@ class Renderer:
                     if self.step == self.deserializer.params.generationSteps:
                         self.gen = True
                         self.wait_time = self.gen_time
+                        self.deserializer.skip_stats()
                     else:
                         self.step += 1
                         print(f'\tStep: {self.step}', end='\r')

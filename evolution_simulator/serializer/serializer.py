@@ -71,6 +71,7 @@ class SerializerBase(metaclass=SerializerBaseMeta):
 
         def __init__(self):
             self.fd = self.base.fd
+            self.generation_size = None
 
         def read_genomes(self):
             pass
@@ -81,7 +82,7 @@ class SerializerBase(metaclass=SerializerBaseMeta):
         def read_step(self):
             pass
 
-        def read_stats(self):
+        def skip_stats(self):
             pass
 
 
@@ -157,8 +158,10 @@ class SerializerV0(SerializerBase):
 
         def __init__(self):
             super().__init__()
-            param_format = BYTE_ORDER + self.base.params_size
-            params, *_ = unpack(param_format, self.fd.read(calcsize(param_format)))
+            self.param_format = BYTE_ORDER + self.base.params_size
+            self.param_size = calcsize(self.param_format)
+
+            params, *_ = unpack(self.param_format, self.fd.read(self.param_size))
             self.params = ParamsHeaderContainer(asdecimal=params).b
 
             self.grid = PosStructContainer(asdecimal=self.params.grid).b
@@ -176,6 +179,21 @@ class SerializerV0(SerializerBase):
             self.init_pos_size = calcsize(self.init_pos_format)
 
             self.stat_size = calcsize(self.base.stat_format)
+
+            self.generation_size_no_stats = (self.genome_size * self.params.entityCount) + \
+                                            self.init_pos_size + \
+                                            (self.generation_size * self.params.generationSteps)
+            self.generation_size_stats = self.generation_size_no_stats + self.stat_size
+
+        def read_stats(self):
+            self.fd.read(self.generation_size_no_stats)
+            data = self.fd.read(self.stat_size)
+            if data:
+                stats = unpack(self.base.stat_format, data)
+                self.fd.seek(-self.generation_size_stats, 1)
+                return stats
+            else:
+                return None
 
         def read_genomes(self):
             dat = self.fd.read(self.genome_size * self.params.entityCount)
@@ -199,7 +217,7 @@ class SerializerV0(SerializerBase):
                     entity_actions.append(Coord.from_action(a2))
             return entity_actions
 
-        def read_stats(self):
+        def skip_stats(self):
             self.fd.seek(self.stat_size, 1)
 
 
