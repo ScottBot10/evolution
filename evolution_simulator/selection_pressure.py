@@ -22,8 +22,8 @@ class SelectionPressure(Vector):
         return 0
 
     @classmethod
-    def from_data(cls, simulator, data):
-        return cls(simulator, from_serialize=True)
+    def from_data(cls, parameters, data):
+        return cls(parameters, from_serialize=True)
 
     def select_entity(self, entity: 'Entity') -> float | None:
         pass

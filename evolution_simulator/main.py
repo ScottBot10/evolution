@@ -30,7 +30,7 @@ def evolve(args):
 
 def render(args):
     from .serializer.serializer import get_serializer
-    from .renderer import Renderer
+    from .renderer.cv import Renderer
 
     renderer_args = {}
     for argname in renderer_argnames:

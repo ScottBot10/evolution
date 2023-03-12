@@ -4,7 +4,7 @@ from itertools import zip_longest
 from math import ceil
 from struct import Struct, calcsize
 
-from .structures import ParamsHeader, ParamsHeader_size, PosStruct, DoubleAction, UINT16_STRUCT, UINT8_STRUCT
+from .structures import ParamsHeader, ParamsHeader_size, PosStruct, DoubleAction, UINT8_STRUCT
 from ..models import Coord
 from ..selection_pressure import selection_pressures
 
@@ -169,6 +169,7 @@ class SerializerV0(SerializerBase):
             self.action_count = ceil(self.params.entityCount / 2)
 
             self.selection_pressure = selection_pressures[self.params.selectionPressure].from_data(
+                self.params,
                 self.params.selectionPressureData)
 
             self.genome_size = calcsize(f'{BYTE_ORDER}{self.params.genomeLength}L')
