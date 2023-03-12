@@ -2,12 +2,14 @@ import ctypes
 import typing as t
 from ctypes import c_uint32
 
+from ...serializer.structures import BytesConvertable
+
 NEURON = 0  # input or output
 SENSOR = 1  # input
 ACTION = 1  # output
 
 
-class Gene(ctypes.LittleEndianStructure):
+class Gene(ctypes.LittleEndianStructure, BytesConvertable):
     # _pack_ = 1
     _fields_ = [
         ("inputType", c_uint32, 1),  # NEURON or SENSOR
@@ -24,6 +26,14 @@ class Gene(ctypes.LittleEndianStructure):
         data = ', '.join(f'{name}={getattr(self, name)!r}' for name, *_ in self._fields_)
         return f'{self.__class__.__qualname__}({data})'
 
+    def __eq__(self, o):
+        return isinstance(o, self.__class__) and self._fields_ == o._fields_ and self.to_bytes() == o.to_bytes()
+
+    @classmethod
+    def random(cls, prng):
+        return cls(prng.integers(2), prng.integers(128), prng.integers(2), prng.integers(128),
+                   prng.integers(-0x8000, 0x8000))
+
 
 class GeneContainer(ctypes.Union):
     _fields_ = [
@@ -31,28 +41,15 @@ class GeneContainer(ctypes.Union):
         ("asdecimal", c_uint32)
     ]
 
-    def __eq__(self, o):
-        if isinstance(o, self.__class__) and self.b._fields_ == o.b._fields_ and self.asdecimal == o.asdecimal:
-            return all(
-                getattr(self.b, field_name) == getattr(o.b, field_name) for field_name, _, _ in self.b._fields_
-            )
-        return False
 
-    @classmethod
-    def random(cls, prng):
-        return cls(
-            Gene(prng.integers(2), prng.integers(128), prng.integers(2), prng.integers(128),
-                 prng.integers(-0x8000, 0x8000)))
-
-
-Genome = t.List[GeneContainer]
+Genome = t.List[Gene]
 
 
 def mutate_genome(genome: Genome, prng, point_mutation_rate):
     for _ in range(len(genome)):
         if prng.random() < point_mutation_rate:
             index = prng.integers(len(genome))
-            gene = genome[index].b
+            gene = genome[index]
             chance = prng.integers(5)
             if chance == 0:
                 gene.inputType ^= 1
@@ -67,7 +64,7 @@ def mutate_genome(genome: Genome, prng, point_mutation_rate):
 
 
 def copy_genome(genome: Genome):
-    return [GeneContainer(asdecimal=gene.asdecimal) for gene in genome]
+    return [Gene.from_bytes(gene.to_bytes()) for gene in genome]
 
 
 def generate_child_genome(prng, genomes: t.List[Genome], by_fitness: bool, sexual_reproduction: bool,

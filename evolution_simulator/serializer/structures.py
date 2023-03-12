@@ -1,7 +1,58 @@
-from ctypes import c_uint64, c_int8, c_uint8, c_uint16, LittleEndianStructure, Union
+from ctypes import c_uint64, c_int8, sizeof, c_uint16, LittleEndianStructure
+from struct import Struct
+
+UINT16_STRUCT = Struct('<H')
+UINT8_STRUCT = Struct('<B')
 
 
-class PosStruct(LittleEndianStructure):
+class BytesConvertable:
+    def to_bytes(self):
+        # noinspection PyTypeChecker
+        return bytes(self)
+
+    @classmethod
+    def from_bytes(cls, bytes_data):
+        # noinspection PyUnresolvedReferences
+        return cls.from_buffer_copy(bytes_data)
+
+
+class Combination:
+    def __init_subclass__(cls, **kwargs):
+        cls.__from_buffer_copy = cls.from_buffer_copy
+        cls.parts_fields = {
+            field: part for _, part in cls._fields_ for field, *_ in part._fields_
+        }
+
+    def __init__(self, **kw):
+        part_kwargs = {
+            part: {} for _, part in self._fields_
+        }
+
+        for field, value in kw.items():
+            param = self.parts_fields.get(field)
+            if param is not None:
+                part_kwargs[param][field] = value
+
+        self.part_instances = {}
+
+        for name, part in self._fields_:
+            part_instance = part(**part_kwargs[part])
+            self.part_instances[part] = part_instance
+            setattr(self, name, part_instance)
+
+    def __getattr__(self, item):
+        part = self.parts_fields.get(item)
+        if part is not None:
+            if not hasattr(self, 'part_instances'):
+                self.part_instances = {
+                    part: getattr(self, name) for name, part in self._fields_
+                }
+            return getattr(self.part_instances[part], item)
+        raise AttributeError
+
+
+class PosStruct(LittleEndianStructure, BytesConvertable):
+    _pack_ = 1
     _fields_ = [
         ('x', c_uint16, 8),  # 256
         ('y', c_uint16, 8),  # 256
@@ -11,67 +62,45 @@ class PosStruct(LittleEndianStructure):
         return f"{self.__class__.__qualname__}({self.x}, {self.y})"
 
 
-class PosStructContainer(Union):
+class ParamsHeader1(LittleEndianStructure, BytesConvertable):
+    _pack_ = 1
     _fields_ = [
-        ("b", PosStruct),
-        ("asdecimal", c_uint16)
+        ("selectionPressure", c_uint64, 7),  # 128
+        ("selectionPressureData", c_uint64, 32),  # 4 294 967 296
+        ("genomeLength", c_uint64, 13),  # 8 192
+        ("hiddenNeurons", c_uint64, 12),  # 4 096
     ]
 
 
-class ParamsHeader(LittleEndianStructure):
+class ParamsHeader2(LittleEndianStructure, BytesConvertable):
+    _pack_ = 1
     _fields_ = [
-        ("grid", c_uint64, 16),
+        ("grid", PosStruct),
         ("entityCount", c_uint64, 16),  # 65 536
-        ("generationSteps", c_uint64, 9),  # 512
-        ("genomeLength", c_uint64, 7),  # 128
-        ("hiddenNeurons", c_uint64, 4),  # 16
-        ("mutationRate", c_uint64, 12)  # 4 096
+        ("generationSteps", c_uint64, 16),  # 65 536
+        ("mutationRate", c_uint64, 16)  # 65 536
     ]
 
 
-class ParamsHeaderContainer(Union):
+class ParamsHeader(Combination, BytesConvertable, LittleEndianStructure):
+    _pack_ = 1
     _fields_ = [
-        ("b", ParamsHeader),
-        ("asdecimal", c_uint64)
+        ("params1", ParamsHeader1),
+        ("params2", ParamsHeader2),
     ]
 
 
-class Action(LittleEndianStructure):
+ParamsHeader_size = sizeof(ParamsHeader)
+
+
+class DoubleAction(LittleEndianStructure, BytesConvertable):
     _fields_ = [
-        ("moveX", c_int8, 2),
-        ("moveY", c_int8, 2)
-    ]
-
-    def __repr__(self):
-        return f"{self.__class__.__qualname__}({self.moveX}, {self.moveY})"
-
-
-class ActionContainer(Union):
-    _fields_ = [
-        ("b", Action),
-        ("asdecimal", c_uint8)
+        ("moveX1", c_int8, 2),
+        ("moveY1", c_int8, 2),
+        ("moveX2", c_int8, 2),
+        ("moveY2", c_int8, 2),
     ]
 
 
-class DoubleAction(LittleEndianStructure):
-    _fields_ = [
-        ("a1", c_uint8, 4),
-        ("a2", c_uint8, 4)
-    ]
-
-
-class DoubleActionContainer(Union):
-    _fields_ = [
-        ("b", DoubleAction),
-        ("asdecimal", c_uint8)
-    ]
-
-    @classmethod
-    def from_actions(cls, a1: Action, a2: Action):
-        return cls(DoubleAction(
-            a1=ActionContainer(a1).asdecimal,
-            a2=ActionContainer(a2).asdecimal
-        ))
-
-    def to_actions(self):
-        return ActionContainer(asdecimal=self.b.a1).b, ActionContainer(asdecimal=self.b.a2).b
+if __name__ == '__main__':
+    pass

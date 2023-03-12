@@ -11,9 +11,12 @@ def _make_vector_node(vector):
     def _vector_node(loader, node):
         value = 0
 
+        data = ()
         if node.id == 'scalar':
             value = loader.construct_scalar(node)
-        return vector[value]
+        elif node.id == 'sequence':
+            value, *data = loader.construct_sequence(node)
+        return vector[value], data
 
     return _vector_node
 
@@ -60,7 +63,7 @@ class Parameters:
     class Simulation(metaclass=YAMLGetter):
         section = "simulation"
 
-        selection_pressure: t.Type[SelectionPressure]
+        selection_pressure: t.Tuple[t.Type[SelectionPressure], t.Optional[t.List]]
         steps_per_generation: int
         long_probe_distance: int
         population_sensor_radius: float

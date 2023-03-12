@@ -13,7 +13,7 @@ from ..entity_io.sensor_vectors import sensors
 
 @dataclass
 class Neuron:
-    output: int
+    output: float
     driven: bool
 
 
@@ -37,8 +37,7 @@ class NeuralNetwork:
     @classmethod
     def from_genome(cls, genome: Genome, max_hidden_neurons):
         connections = []
-        for gene in genome:
-            connection = gene.b
+        for connection in genome:
             if connection.inputType == SENSOR:
                 connection.inputNum %= sensors.len
             else:

@@ -36,8 +36,9 @@ class Simulator:
     def __init__(self, prng, fd):
         self.prng = prng
         self.Parameters: t.Type[Parameters] = Parameters
-        self.selection_pressure = self.Parameters.Simulation.selection_pressure(self)
-        self.serializer = SerializerV0(fd).Serializer(self.Parameters)
+        pressure, data = self.Parameters.Simulation.selection_pressure
+        self.selection_pressure = pressure(self.Parameters, *data)
+        self.serializer = SerializerV0(fd).Serializer(self, self.Parameters)
 
         self.grid = np.zeros((self.Parameters.World.grid_x, self.Parameters.World.grid_y), dtype=np.uint16)  # 65_536
 

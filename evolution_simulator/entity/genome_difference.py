@@ -18,9 +18,10 @@ def hamming_bits(genome1: 'Genome', genome2: 'Genome'):
     genome_len = len(genome1)
     assert genome_len and genome_len == len(genome2)
     for gene1, gene2 in zip(genome1, genome2):
-        bit_difference += (gene1.asdecimal ^ gene2.asdecimal).bit_count()
+        bit_difference += (
+                    int.from_bytes(gene1.to_bytes(), 'little') ^ int.from_bytes(gene1.to_bytes(), 'little')).bit_count()
 
-    return 1 - min(1, (2 * bit_difference) / (genome_len * sizeof(gene1) * 8))
+    return 1 - min(1.0, (2 * bit_difference) / (genome_len * sizeof(gene1) * 8))
 
 
 def hamming_bytes(genome1: 'Genome', genome2: 'Genome'):

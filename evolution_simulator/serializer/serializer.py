@@ -2,10 +2,11 @@ import typing as t
 from io import BytesIO
 from itertools import zip_longest
 from math import ceil
-from struct import pack, unpack, calcsize
+from struct import Struct, calcsize
 
-from .structures import ParamsHeader, ParamsHeaderContainer, Action, DoubleActionContainer, PosStructContainer
+from .structures import ParamsHeader, ParamsHeader_size, PosStruct, DoubleAction, UINT16_STRUCT, UINT8_STRUCT
 from ..models import Coord
+from ..selection_pressure import selection_pressures
 
 if t.TYPE_CHECKING:
     from ..simulator import Simulator
@@ -13,8 +14,7 @@ if t.TYPE_CHECKING:
 
 BYTE_ORDER = '<'
 FILE_THING = b'SBTEVO'
-MAIN_HEADER = f'{BYTE_ORDER}{len(FILE_THING)}sB'
-MAIN_HEADER_SIZE = calcsize(MAIN_HEADER)
+MAIN_HEADER = Struct(f'{BYTE_ORDER}{len(FILE_THING)}sB')
 
 File = t.BinaryIO | t.TextIO
 FileOrBytes = bytes | File
@@ -47,7 +47,7 @@ class SerializerBase(metaclass=SerializerBaseMeta):
     class Serializer:
         base: t.Type['SerializerBase']
 
-        def __init__(self, Parameters):
+        def __init__(self, simulator, Parameters):
             self.fd = self.base.fd
             self.Parameters = Parameters
 
@@ -88,35 +88,39 @@ class SerializerBase(metaclass=SerializerBaseMeta):
 
 class SerializerV0(SerializerBase):
     version = 0
-    params_size = 'Q'
-    full_header = MAIN_HEADER + params_size
-    stat_format = BYTE_ORDER + 'Lf'
+    stat_format = Struct(f'{BYTE_ORDER}Lf')
 
     class Serializer(SerializerBase.Serializer):
         base: t.Type['SerializerV0']
 
-        def __init__(self, Parameters):
-            super().__init__(Parameters)
+        def __init__(self, simulator, Parameters):
+            super().__init__(simulator, Parameters)
+
+            self.fd.write(MAIN_HEADER.pack(FILE_THING, self.base.version))
+
             self.entity_actions = None
             self.entity_count = Parameters.World.entity_count
             self.steps_per_generation = Parameters.Simulation.steps_per_generation
             self.genome_length = Parameters.Entities.genome_length
 
-            self.genome_format = BYTE_ORDER + ('L' * self.genome_length)
-            self.pos_format = BYTE_ORDER + 'H' * self.Parameters.World.entity_count
+            self.genome_format = Struct(f"{BYTE_ORDER}{self.genome_length}L")
+            self.pos_format = Struct(f"{BYTE_ORDER}{self.Parameters.World.entity_count}H")
+            self.generation_format = Struct(f"{BYTE_ORDER}{ceil(self.Parameters.World.entity_count / 2)}B")
 
             self.initialize_entity_actions()
 
-            params_header = ParamsHeaderContainer(
-                ParamsHeader(
-                    grid=PosStructContainer((self.Parameters.World.grid_x, self.Parameters.World.grid_y)).asdecimal,
-                    entityCount=self.Parameters.World.entity_count,
-                    generationSteps=self.Parameters.Simulation.steps_per_generation,
-                    genomeLength=self.Parameters.Entities.genome_length,
-                    hiddenNeurons=self.Parameters.Entities.max_hidden_neurons,
-                    mutationRate=int(self.Parameters.Entities.point_mutation_rate * 1000)))
+            params_header = ParamsHeader(
+                grid=PosStruct(self.Parameters.World.grid_x, self.Parameters.World.grid_y),
+                entityCount=self.Parameters.World.entity_count,
+                generationSteps=self.Parameters.Simulation.steps_per_generation,
+                genomeLength=self.Parameters.Entities.genome_length,
+                hiddenNeurons=self.Parameters.Entities.max_hidden_neurons,
+                mutationRate=int(self.Parameters.Entities.point_mutation_rate * 65_536),
+                selectionPressure=simulator.selection_pressure.id,
+                selectionPressureData=simulator.selection_pressure.to_data()
+            )
 
-            self.fd.write(pack(self.base.full_header, FILE_THING, self.base.version, params_header.asdecimal))
+            self.fd.write(params_header.to_bytes())
 
         def initialize_entity_actions(self):
             self.entity_actions = [
@@ -126,30 +130,29 @@ class SerializerV0(SerializerBase):
 
         def write_genomes(self, entities: t.List['Entity']):
             for entity in entities:
-                self.fd.write(pack(self.genome_format, *(gene.asdecimal for gene in entity.genome)))
+                self.fd.write(b''.join(gene.to_bytes() for gene in entity.genome))
 
         def entity_move(self, entity: 'Entity', sim: 'Simulator', offset: 'Coord'):
-            self.entity_actions[sim.step][entity.index - 1] = offset.to_action()
+            self.entity_actions[sim.step][entity.index - 1] = offset
 
         def write_initial_pos(self, entities: t.List['Entity']):
-            self.fd.write(pack(
-                self.pos_format,
-                *(
-                    PosStructContainer((entity.loc.x, entity.loc.y)).asdecimal
-                    for entity in entities
-                )
+            self.fd.write(b''.join(
+                PosStruct(entity.loc.x, entity.loc.y).to_bytes()
+                for entity in entities
             ))
 
         def write_generation(self, indexes: t.List[int], time: float):
             for step in self.entity_actions:
                 k = zip_longest(step[::2], step[1::2])
                 l = [
-                    DoubleActionContainer.from_actions(a1 or Action(), a2 or Action()).asdecimal
-                    for a1, a2 in k
+                    DoubleAction(offset1.x if offset1 is not None else 0,
+                                 offset1.y if offset1 is not None else 0,
+                                 offset2.x if offset2 is not None else 0,
+                                 offset2.y if offset2 is not None else 0).to_bytes()
+                    for offset1, offset2 in k
                 ]
-                self.fd.write(pack(BYTE_ORDER + 'B' * ceil(self.Parameters.World.entity_count / 2),
-                                   *l))
-            self.fd.write(pack(self.base.stat_format, len(indexes), time))
+                self.fd.write(b''.join(l))
+            self.fd.write(self.base.stat_format.pack(len(indexes), time))
 
             self.initialize_entity_actions()
 
@@ -158,38 +161,32 @@ class SerializerV0(SerializerBase):
 
         def __init__(self):
             super().__init__()
-            self.param_format = BYTE_ORDER + self.base.params_size
-            self.param_size = calcsize(self.param_format)
 
-            params, *_ = unpack(self.param_format, self.fd.read(self.param_size))
-            self.params = ParamsHeaderContainer(asdecimal=params).b
+            self.params = ParamsHeader.from_bytes(self.fd.read(ParamsHeader_size))
 
-            self.grid = PosStructContainer(asdecimal=self.params.grid).b
-
-            self.mutation_rate = self.params.mutationRate / 1000
+            self.mutation_rate = self.params.mutationRate / 65_536
             self.odd_enemies = self.params.entityCount % 2 == 0
             self.action_count = ceil(self.params.entityCount / 2)
 
-            self.genome_size = calcsize(BYTE_ORDER + ('L' * self.params.genomeLength))
+            self.selection_pressure = selection_pressures[self.params.selectionPressure].from_data(
+                self.params.selectionPressureData)
 
-            self.generation_format = BYTE_ORDER + 'B' * self.action_count
-            self.generation_size = calcsize(self.generation_format)
+            self.genome_size = calcsize(f'{BYTE_ORDER}{self.params.genomeLength}L')
 
-            self.init_pos_format = BYTE_ORDER + 'H' * self.params.entityCount
-            self.init_pos_size = calcsize(self.init_pos_format)
+            self.generation_format = Struct(f'{BYTE_ORDER}{self.action_count}B')
 
-            self.stat_size = calcsize(self.base.stat_format)
+            self.init_pos_format = Struct(f'{BYTE_ORDER}{self.params.entityCount}H')
 
             self.generation_size_no_stats = (self.genome_size * self.params.entityCount) + \
-                                            self.init_pos_size + \
-                                            (self.generation_size * self.params.generationSteps)
-            self.generation_size_stats = self.generation_size_no_stats + self.stat_size
+                                            self.init_pos_format.size + \
+                                            (self.generation_format.size * self.params.generationSteps)
+            self.generation_size_stats = self.generation_size_no_stats + self.base.stat_format.size
 
         def read_stats(self):
             self.fd.read(self.generation_size_no_stats)
-            data = self.fd.read(self.stat_size)
+            data = self.fd.read(self.base.stat_format.size)
             if data:
-                stats = unpack(self.base.stat_format, data)
+                stats = self.base.stat_format.unpack(data)
                 self.fd.seek(-self.generation_size_stats, 1)
                 return stats
             else:
@@ -198,34 +195,38 @@ class SerializerV0(SerializerBase):
         def read_genomes(self):
             dat = self.fd.read(self.genome_size * self.params.entityCount)
 
+        def _read_chunks(self, total_size, chunk_size):
+            data = self.fd.read(total_size)
+            return [
+                data[i:i + chunk_size]
+                for i in range(0, total_size, chunk_size)
+            ]
+
         def read_initial_pos(self):
-            data = self.fd.read(self.init_pos_size)
-            if data:
-                return [
-                    Coord.from_pos_struct(PosStructContainer(asdecimal=pos).b)
-                    for pos in unpack(self.init_pos_format, data)
-                ]
-            else:
-                return
+            return [
+                Coord.from_pos_struct(PosStruct.from_bytes(chunk))
+                for chunk in self._read_chunks(self.init_pos_format.size, 2)
+            ]
 
         def read_step(self):
             entity_actions = []
-            for i, action in enumerate(unpack(self.generation_format, self.fd.read(self.generation_size))):
-                a1, a2 = DoubleActionContainer(asdecimal=action).to_actions()
-                entity_actions.append(Coord.from_action(a1))
+            for i, chunk in enumerate(self.fd.read(self.generation_format.size)):
+                UINT8_STRUCT.pack_into(double_action := DoubleAction(), 0, chunk)
+
+                entity_actions.append(Coord(double_action.moveX1, double_action.moveY1))
                 if i != self.action_count or not self.odd_enemies:
-                    entity_actions.append(Coord.from_action(a2))
+                    entity_actions.append(Coord(double_action.moveX2, double_action.moveY2))
             return entity_actions
 
         def skip_stats(self):
-            self.fd.seek(self.stat_size, 1)
+            self.fd.seek(self.base.stat_format.size, 1)
 
 
 def get_serializer(fd: FileOrBytes) -> SerializerBaseMeta:
     if isinstance(fd, bytes):
         fd = BytesIO(fd)
-    header = fd.read(MAIN_HEADER_SIZE)
-    if len(header) == MAIN_HEADER_SIZE:
-        file_thing, version = unpack(MAIN_HEADER, header)
+    header = fd.read(MAIN_HEADER.size)
+    if len(header) == MAIN_HEADER.size:
+        file_thing, version = MAIN_HEADER.unpack(header)
         if file_thing == FILE_THING:
             return SERIALIZERS.get(version)(fd)

@@ -3,7 +3,7 @@ import typing as t
 import numpy as np
 
 from .entity_io import actions
-from .genome import Gene, GeneContainer, Genome, NeuralNetwork
+from .genome import Gene, Genome, NeuralNetwork
 from ..models import Coord, Direction
 
 if t.TYPE_CHECKING:
@@ -59,6 +59,6 @@ def init_entities(prng, grid, entity_count, genome_length, max_hidden_neurons, k
     for i, val in enumerate(prng.choice(m * n, entity_count, False), start=1):
         loc = np.unravel_index(val, grid_shape)
         grid[loc] = i
-        genome = [GeneContainer.random(prng) for _ in range(genome_length)]
+        genome = [Gene.random(prng) for _ in range(genome_length)]
         entities.append(Entity(i, Coord(*loc), NeuralNetwork.from_genome(genome, max_hidden_neurons), genome, prng, k))
     return entities
