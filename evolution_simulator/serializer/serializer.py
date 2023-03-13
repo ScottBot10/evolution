@@ -4,6 +4,8 @@ from itertools import zip_longest
 from math import ceil
 from struct import Struct, calcsize
 
+import numpy as np
+
 from .structures import ParamsHeader, ParamsHeader_size, PosStruct, DoubleAction, UINT8_STRUCT
 from ..models import Coord
 from ..selection_pressure import selection_pressures
@@ -88,7 +90,7 @@ class SerializerBase(metaclass=SerializerBaseMeta):
 
 class SerializerV0(SerializerBase):
     version = 0
-    stat_format = Struct(f'{BYTE_ORDER}Lf')
+    stat_format = Struct(f'{BYTE_ORDER}L')
 
     class Serializer(SerializerBase.Serializer):
         base: t.Type['SerializerV0']
@@ -112,28 +114,32 @@ class SerializerV0(SerializerBase):
             params_header = ParamsHeader(
                 grid=PosStruct(self.Parameters.World.grid_x, self.Parameters.World.grid_y),
                 entityCount=self.Parameters.World.entity_count,
-                generationSteps=self.Parameters.Simulation.steps_per_generation,
+                generationSteps=self.steps_per_generation,
+                mutationRate=int(self.Parameters.Entities.point_mutation_rate * 1024),
                 genomeLength=self.Parameters.Entities.genome_length,
                 hiddenNeurons=self.Parameters.Entities.max_hidden_neurons,
-                mutationRate=int(self.Parameters.Entities.point_mutation_rate * 65_536),
                 selectionPressure=simulator.selection_pressure.id,
-                selectionPressureData=simulator.selection_pressure.to_data()
+                selectionPressureData=simulator.selection_pressure.to_data(),
+                longProbeDistance=self.Parameters.Simulation.long_probe_distance,
+                geneticDifferenceAlgorithm=self.Parameters.Entities.genetic_difference_algorithm,
+                populationSensorRadius=int(self.Parameters.Simulation.population_sensor_radius * 10),
+                responsivenessCurveKfactor=self.Parameters.Entities.responsiveness_curve_kfactor,
+                chooseParentsByFitness=int(self.Parameters.Entities.choose_parents_by_fitness),
+                sexualReproduction=int(self.Parameters.Entities.sexual_reproduction)
             )
 
             self.fd.write(params_header.to_bytes())
 
         def initialize_entity_actions(self):
-            self.entity_actions = [
-                [None for __ in range(self.Parameters.World.entity_count)]
-                for _ in range(self.Parameters.Simulation.steps_per_generation)
-            ]
+            self.entity_actions = np.empty((self.steps_per_generation + int(self.steps_per_generation % 2 != 0),
+                                            self.Parameters.World.entity_count), dtype=object)
 
         def write_genomes(self, entities: t.List['Entity']):
             for entity in entities:
                 self.fd.write(b''.join(gene.to_bytes() for gene in entity.genome))
 
         def entity_move(self, entity: 'Entity', sim: 'Simulator', offset: 'Coord'):
-            self.entity_actions[sim.step][entity.index - 1] = offset
+            self.entity_actions[sim.step, entity.index - 1] = offset
 
         def write_initial_pos(self, entities: t.List['Entity']):
             self.fd.write(b''.join(
@@ -141,18 +147,14 @@ class SerializerV0(SerializerBase):
                 for entity in entities
             ))
 
-        def write_generation(self, indexes: t.List[int], time: float):
-            for step in self.entity_actions:
-                k = zip_longest(step[::2], step[1::2])
-                l = [
-                    DoubleAction(offset1.x if offset1 is not None else 0,
-                                 offset1.y if offset1 is not None else 0,
-                                 offset2.x if offset2 is not None else 0,
-                                 offset2.y if offset2 is not None else 0).to_bytes()
-                    for offset1, offset2 in k
-                ]
-                self.fd.write(b''.join(l))
-            self.fd.write(self.base.stat_format.pack(len(indexes), time))
+        def write_generation(self, indexes: t.List[int]):
+            for step in self.entity_actions.reshape(self.steps_per_generation, -1, 2):
+                self.fd.write(b''.join(DoubleAction(offset1.x if offset1 is not None else 0,
+                                                    offset1.y if offset1 is not None else 0,
+                                                    offset2.x if offset2 is not None else 0,
+                                                    offset2.y if offset2 is not None else 0).to_bytes()
+                                       for offset1, offset2 in step))
+            self.fd.write(self.base.stat_format.pack(len(indexes)))
 
             self.initialize_entity_actions()
 
@@ -164,7 +166,9 @@ class SerializerV0(SerializerBase):
 
             self.params = ParamsHeader.from_bytes(self.fd.read(ParamsHeader_size))
 
-            self.mutation_rate = self.params.mutationRate / 65_536
+            self.mutation_rate = self.params.mutationRate / 1024
+            self.population_sensor_radius = self.params.populationSensorRadius / 10
+
             self.odd_enemies = self.params.entityCount % 2 == 0
             self.action_count = ceil(self.params.entityCount / 2)
 
@@ -179,7 +183,7 @@ class SerializerV0(SerializerBase):
             self.init_pos_format = Struct(f'{BYTE_ORDER}{self.params.entityCount}H')
 
             self.generation_size_no_stats = (self.genome_size * self.params.entityCount) + \
-                                            self.init_pos_format.size + \
+                                             self.init_pos_format.size + \
                                             (self.generation_format.size * self.params.generationSteps)
             self.generation_size_stats = self.generation_size_no_stats + self.base.stat_format.size
 

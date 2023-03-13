@@ -6,7 +6,8 @@ import cv2 as cv
 import numpy as np
 from numpy.random import default_rng
 
-from ..serializer.serializer import Coord, SerializerBase
+from .selection_pressure import selection_pressure_renderers
+from ...serializer.serializer import Coord, SerializerBase
 
 prng = default_rng(42)
 
@@ -45,7 +46,7 @@ class Renderer:
 
         self.frame_width = self.frame_size
         self.half_frame_width = self.frame_width / 2
-        frame_height = self.frame_size + self.topbar_size + self.topbar_width
+        self.frame_height = self.frame_size + self.topbar_size + self.topbar_width
 
         self.step_time = step_time
         self.gen_time = gen_time
@@ -55,7 +56,7 @@ class Renderer:
 
         self.y_offset = self.topbar_size + self.topbar_width + self.circle_radius
 
-        self.img_base = np.full((frame_height, self.frame_width, 3), 255, np.uint8)
+        self.img_base = np.full((self.frame_height, self.frame_width, 3), 255, np.uint8)
         self.img = None
         cv.line(self.img_base, (0, self.topbar_size), (self.frame_width, self.topbar_size), (0, 0, 0),
                 self.topbar_width)
@@ -75,6 +76,16 @@ class Renderer:
         self.text_lower = int((topbar_nopanel * 3 / 4) - text_height / 2) + panel_size
         cv.putText(self.img_base, text, (int(self.half_frame_width - (text_width / 2)), self.text_upper),
                    cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv.LINE_AA, False)
+
+        self.actual_width = self.circle_diameter * self.deserializer.params.grid.x
+        self.actual_height = self.circle_diameter * self.deserializer.params.grid.y
+        self.half_actual_width = int(self.actual_width / 2)
+        self.half_actual_height = int(self.actual_height / 2)
+
+        self.selection_pressure_renderer = selection_pressure_renderers.get(deserializer.selection_pressure.__class__)(
+            self
+        )
+        self.img_base = self.selection_pressure_renderer.render(self.img_base)
 
         self.entity_colours: t.Dict[int, tuple[int, int, int]] = {}
         self.entity_positions: t.List[Coord] = []
@@ -100,11 +111,9 @@ class Renderer:
             self.entity_colours[i] = (int(prng.integers(256)), int(prng.integers(256)), int(prng.integers(256)))
 
     def draw_circle_at(self, img, grid_x, grid_y, colour):
-        cv.circle(img, (self.circle_radius + (self.circle_diameter * grid_x),
-                        self.y_offset + (self.circle_diameter * grid_y)),
-
-                  self.circle_radius,
-                  colour, -1)
+        cv.circle(img, (
+            self.circle_radius + (self.circle_diameter * grid_x), self.y_offset + (self.circle_diameter * grid_y)),
+                  self.circle_radius, colour, -1)
 
     def draw_frame(self):
         img = self.img_base.copy()
@@ -139,7 +148,7 @@ class Renderer:
                             print('\nFinished')
                             # return perf_counter() - self.ssss
                             continue
-                        self.survivors, _ = stats
+                        self.survivors, *_ = stats
                         self.deserializer.read_genomes()
                         self.entity_positions = self.deserializer.read_initial_pos()
                         print(f"\nGeneration: {self.generation}")

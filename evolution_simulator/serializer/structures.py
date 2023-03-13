@@ -67,8 +67,10 @@ class ParamsHeader1(LittleEndianStructure, BytesConvertable):
     _fields_ = [
         ("selectionPressure", c_uint64, 7),  # 128
         ("selectionPressureData", c_uint64, 32),  # 4 294 967 296
-        ("genomeLength", c_uint64, 13),  # 8 192
-        ("hiddenNeurons", c_uint64, 12),  # 4 096
+        ("genomeLength", c_uint64, 7),  # 128
+        ("hiddenNeurons", c_uint64, 6),  # 4 096
+        ("longProbeDistance", c_uint64, 8),  # 256
+        ("geneticDifferenceAlgorithm", c_uint64, 4),  # 16
     ]
 
 
@@ -77,8 +79,12 @@ class ParamsHeader2(LittleEndianStructure, BytesConvertable):
     _fields_ = [
         ("grid", PosStruct),
         ("entityCount", c_uint64, 16),  # 65 536
-        ("generationSteps", c_uint64, 16),  # 65 536
-        ("mutationRate", c_uint64, 16)  # 65 536
+        ("generationSteps", c_uint64, 10),  # 65 536
+        ("mutationRate", c_uint64, 10),  # 65 536
+        ("populationSensorRadius", c_uint64, 6),  # 64
+        ("responsivenessCurveKfactor", c_uint64, 4),  # 16
+        ("chooseParentsByFitness", c_uint64, 1),  # 2
+        ("sexualReproduction", c_uint64, 1),  # 2
     ]
 
 

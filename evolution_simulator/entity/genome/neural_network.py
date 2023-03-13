@@ -87,7 +87,7 @@ class NeuralNetwork:
 
                     nodes.pop(num)
 
-        assert len(nodes) < max_hidden_neurons
+        assert len(nodes) <= max_hidden_neurons
         for i, node in enumerate(nodes.values()):
             assert node.outputs != 0
             node.remapped_number = i

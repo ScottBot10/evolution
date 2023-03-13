@@ -97,9 +97,9 @@ class Simulator:
                             self.step_entity(entity)
                     if self.selection_pressure.on_step:
                         self.selection_pressure.on_step(self)
+                self.spawn_new_gen()
                 gen_time = perf_counter() - start
                 print('Time taken: ', gen_time)
-                self.spawn_new_gen(gen_time)
                 self.generation += 1
                 print()
 
@@ -108,7 +108,7 @@ class Simulator:
         action_levels = entity.nn.feed_forward(entity, self)
         entity.execute_actions(self, action_levels)
 
-    def spawn_new_gen(self, gen_time):
+    def spawn_new_gen(self):
         survival_scores = self.selection_pressure.select(self)
         for entity_index in list(survival_scores.keys()):
             entity = self.entities[entity_index - 1]
@@ -117,7 +117,7 @@ class Simulator:
         print('Survivors: ', len(survival_scores))
         indexes = [d[0] - 1 for d in sorted(survival_scores.items(), key=lambda d: d[1], reverse=True)]
         genomes = [self.entities[index].genome for index in indexes]
-        self.serializer.write_generation(indexes, gen_time)
+        self.serializer.write_generation(indexes)
         self.grid.fill(0)
         if genomes:
             self.create_new_gen(genomes)

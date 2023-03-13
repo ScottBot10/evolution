@@ -34,6 +34,7 @@ class SelectionPressure(Vector):
             for entity in simulator.entities
             if (score := self.select_entity(entity)) is not None
         }
+
     on_step = None
 
 
@@ -165,7 +166,7 @@ class Circle(SelectionPressure):
 
     @classmethod
     def from_data(cls, simulator, data):
-        return cls(simulator, radius=data)
+        return cls(simulator, radius=data, from_serialize=True)
 
     def select_entity(self, entity: 'Entity') -> float | None:
         distance = sqrt((entity.loc.x - self.half_x) ** 2 + (entity.loc.y - self.half_y) ** 2)
